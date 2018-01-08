@@ -200,14 +200,36 @@ def requires_admin(f):
     return decorated_function
 
 
+def request_wants_json():
+    """Check if 'application/json' is the best Accept: match.
+    This ensures we default to HTML for browsers that Accept */*.
+
+    Taken from http://flask.pocoo.org/snippets/45/, which is released into
+    the public domain.
+    """
+    best = request.accept_mimetypes.best_match(
+        ['application/json', 'text/html']
+    )
+    return (
+        best == 'application/json' and
+        request.accept_mimetypes[best] >
+        request.accept_mimetypes['text/html']
+    )
+
+
+def current_user(session):
+    if not session.get('userinfo'):
+        return None
+
+    return User.query.filter(
+        User.email == session['userinfo']['email']
+    ).first()
+
+
 @app.context_processor
 def inject_user():
     """Injects a user and configuration in templates' context."""
-    if session.get('userinfo'):
-        cur_user = User.query.filter(User.email ==
-                                     session['userinfo']['email']).first()
-    else:
-        cur_user = None
+    cur_user = current_user(session)
 
     if cur_user and cur_user.pulse_users:
         pulse_user = cur_user.pulse_users[0]
@@ -331,6 +353,22 @@ def queues():
     if g.user.admin:
         users = User.query.all()
         no_owner_queues = list(Queue.query.filter(Queue.owner == None))
+    if request_wants_json():
+        response = {'users': {}}
+        users.insert(0, current_user(session))
+
+        for u in users:
+            response['users'][u.email] = {}
+            for pu in u.pulse_users:
+                response['users'][u.email][pu.username] = {
+                    'queues': {q.name: {} for q in pu.queues}
+                }
+        #         response['queues'][u.email][pu.username] = [q.name for q in pu.queues]
+        
+        # if no_owner_queues:
+        #     response['no_owner_queues'] = no_owner_queues
+
+        return jsonify(response)
     return render_template('queues.html', users=users,
                            no_owner_queues=no_owner_queues)
 

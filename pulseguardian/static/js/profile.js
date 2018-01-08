@@ -90,4 +90,9 @@ $(document).ready(function() {
 
     deleteableObject('queue');
     deleteableObject('pulse-user');
+
+    fetch('/queues', {headers: {Accept: 'application/json'}}).then(function(response) {
+	console.log(response);
+    });
+
 });
